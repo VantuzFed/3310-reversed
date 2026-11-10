@@ -24,8 +24,9 @@ all: nokia3310$(EXE)
 
 assets:
 	python3 tools/extract_s20_assets.py
+	python3 tools/embed_phone_skin.py
 
-nokia3310$(EXE): $(CORE_SRCS) src/platform_sdl2.c
+nokia3310$(EXE): $(CORE_SRCS) src/platform_sdl2.c src/s20_phone_skin.c
 	$(CC) $(CFLAGS) $(SDL_CFLAGS) $^ -o $@ $(SDL_LIBS) $(MATH_LIB)
 
 smoke_test$(EXE): $(CORE_SRCS) tests/smoke_test.c

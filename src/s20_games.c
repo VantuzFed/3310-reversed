@@ -305,7 +305,19 @@ static void snake_render(const s20_games_t *g, s20_lcd_t *lcd) {
     snprintf(sbuf, sizeof(sbuf), "%04ld", (long)g->sn_score);
     s20_lcd_draw_text(lcd, 2, 1, S20_FONT_TINY_PLAIN, sbuf, S20_DRAW_SET);
     s20_lcd_fill_rect(lcd, 0, 8, 84, 1, S20_DRAW_SET);
-    s20_lcd_draw_rect_outline(lcd, 1, 9, 82, 38, S20_DRAW_SET);
+    if (g->snake_maze == 0) {
+        /* Dotted border in No-maze wrap-around mode */
+        for (int x = 1; x <= 82; x += 2) {
+            s20_lcd_set_pixel(lcd, x, 9, S20_DRAW_SET);
+            s20_lcd_set_pixel(lcd, x, 46, S20_DRAW_SET);
+        }
+        for (int y = 9; y <= 46; y += 2) {
+            s20_lcd_set_pixel(lcd, 1, y, S20_DRAW_SET);
+            s20_lcd_set_pixel(lcd, 82, y, S20_DRAW_SET);
+        }
+    } else {
+        s20_lcd_draw_rect_outline(lcd, 1, 9, 82, 38, S20_DRAW_SET);
+    }
 
     if (g->sn_bonus_active) {
         draw_sprite(lcd, 56, 2, &s20_snake_sprites[1 + g->sn_bonus_kind], S20_DRAW_SET);
@@ -331,7 +343,10 @@ static void snake_render(const s20_games_t *g, s20_lcd_t *lcd) {
                     &s20_snake_sprites[1 + g->sn_bonus_kind], S20_DRAW_SET);
     }
 
-    /* Snake segments */
+    /* Snake segments: directions 0=R, 1=D, 2=L, 3=U */
+    static const uint8_t head_spr[4]  = { 17, 16, 15, 18 };
+    static const uint8_t mouth_spr[4] = { 19, 20, 21, 22 };
+    static const uint8_t tail_spr[4]  = { 33, 32, 31, 34 };
     static const int dx[4] = { 1, 0, -1, 0 };
     static const int dy[4] = { 0, 1, 0, -1 };
     int nx = (g->sn_body[0].x + dx[g->sn_dir] + 20) % 20;
@@ -344,10 +359,10 @@ static void snake_render(const s20_games_t *g, s20_lcd_t *lcd) {
         int py = 10 + g->sn_body[i].y * 4;
         int spr = 23;
         if (i == 0) {
-            spr = (mouth_open ? 19 : 15) + (int)g->sn_dir;
+            spr = mouth_open ? mouth_spr[g->sn_dir & 3] : head_spr[g->sn_dir & 3];
         } else if (i == g->sn_len - 1) {
             uint8_t d = snake_dir_between(g->sn_body[i], g->sn_body[i - 1]);
-            spr = 31 + (int)d;
+            spr = tail_spr[d & 3];
         } else {
             uint8_t d = snake_dir_between(g->sn_body[i], g->sn_body[i - 1]);
             spr = (g->sn_belly[i] ? 27 : 23) + (int)d;
@@ -987,7 +1002,7 @@ void s20_games_init(s20_games_t *g, uint32_t seed) {
     g->lights = true;
     g->shakes = true;
     g->snake_level = 4;
-    g->snake_maze = 0;
+    g->snake_maze = 1;
     g->bantumi_level = 2;
     g->pairs_level = 3;
     g->pairs_timed = true;

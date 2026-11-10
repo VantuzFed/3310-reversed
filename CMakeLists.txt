@@ -54,7 +54,7 @@ else()
     endif()
 endif()
 
-add_executable(nokia3310 src/platform_sdl2.c)
+add_executable(nokia3310 src/platform_sdl2.c src/s20_phone_skin.c)
 target_link_libraries(nokia3310 PRIVATE s20_core ${S20_SDL2_TARGET})
 if(NOT TARGET SDL2::SDL2 AND NOT TARGET PkgConfig::SDL2 AND DEFINED SDL2_INCLUDE_DIRS)
     target_include_directories(nokia3310 PRIVATE ${SDL2_INCLUDE_DIRS})

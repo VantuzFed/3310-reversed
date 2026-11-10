@@ -130,9 +130,13 @@ int main(void) {
     assert(ui.screen == S20_SCREEN_CALCULATOR);
     assert(fabs(ui.calc_cur - 50.0) < 1e-6);
 
-    s20_ui_handle_key(&ui, S20_KEY_OP_DIV);
+    s20_ui_handle_key(&ui, S20_KEY_STAR); /* '+' */
+    s20_ui_handle_key(&ui, S20_KEY_STAR); /* '-' */
+    s20_ui_handle_key(&ui, S20_KEY_STAR); /* '*' */
+    s20_ui_handle_key(&ui, S20_KEY_STAR); /* '/' */
     s20_ui_handle_key(&ui, S20_KEY_2);
-    s20_ui_handle_key(&ui, S20_KEY_OP_EQ);
+    s20_ui_handle_key(&ui, S20_KEY_SELECT); /* Options -> Equals */
+    s20_ui_handle_key(&ui, S20_KEY_SELECT);
     assert(fabs(ui.calc_cur - 25.0) < 1e-6);
 
     /* 7. Test Tones menu (5 -> 1 Ringing tone) + REPS audio synthesis across all 35 tones */
@@ -177,7 +181,7 @@ int main(void) {
     s20_ui_tick(&ui);
     assert(count_lit_pixels(ui.lcd.fb) > 50);
 
-    /* 8a. Snake II */
+    /* 8a. Snake II (defaults to Maze 1 walled box -> hits wall on edge) */
     s20_ui_handle_key(&ui, S20_KEY_SELECT); /* Snake II menu */
     s20_ui_handle_key(&ui, S20_KEY_SELECT); /* New game */
     assert(ui.games.view == S20_GVIEW_PLAYING && ui.games.game == S20_GAME_SNAKE);
@@ -188,8 +192,13 @@ int main(void) {
     s20_ui_tick(&ui);
     dump_ascii("GAME: SNAKE II", ui.lcd.fb);
     assert(count_lit_pixels(ui.lcd.fb) > 100);
-    s20_ui_handle_key(&ui, S20_KEY_BACK);
-    s20_ui_handle_key(&ui, S20_KEY_BACK);
+    for (int step = 0; step < 10 && ui.games.view == S20_GVIEW_PLAYING; step++) {
+        fake_ticks += 300;
+        s20_ui_tick(&ui);
+    }
+    assert(ui.games.view == S20_GVIEW_GAMEOVER);
+    s20_ui_handle_key(&ui, S20_KEY_BACK); /* Back to Snake II menu */
+    s20_ui_handle_key(&ui, S20_KEY_BACK); /* Back to Games list */
 
     /* 8b. Space Impact */
     s20_ui_handle_key(&ui, S20_KEY_DOWN);   /* Space impact */

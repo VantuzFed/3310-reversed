@@ -29,13 +29,7 @@ typedef enum {
     S20_KEY_HASH,
     S20_KEY_POWER,
     S20_KEY_LEFT,
-    S20_KEY_RIGHT,
-    S20_KEY_OP_ADD,
-    S20_KEY_OP_SUB,
-    S20_KEY_OP_MUL,
-    S20_KEY_OP_DIV,
-    S20_KEY_OP_DOT,
-    S20_KEY_OP_EQ
+    S20_KEY_RIGHT
 } s20_key_t;
 
 typedef struct {

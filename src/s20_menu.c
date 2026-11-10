@@ -607,6 +607,66 @@ static void handle_composer_key(s20_ui_t *ui, s20_key_t key) {
     }
 }
 
+static void calc_clear(s20_ui_t *ui) {
+    ui->calc_acc = 0.0;
+    ui->calc_cur = 0.0;
+    ui->calc_len = 0;
+    ui->calc_buf[0] = '\0';
+    ui->calc_has_acc = false;
+    ui->calc_has_op = false;
+    ui->calc_fresh_result = false;
+    ui->calc_error = false;
+}
+
+static bool calc_apply_binary(double a, double b, uint8_t op, double *out) {
+    if (op == 0) *out = a + b;
+    else if (op == 1) *out = a - b;
+    else if (op == 2) *out = a * b;
+    else {
+        if (b == 0.0) return false;
+        *out = a / b;
+    }
+    return isfinite(*out);
+}
+
+static void calc_eval(s20_ui_t *ui) {
+    if (!ui->calc_has_acc || !ui->calc_has_op) return;
+    double res = 0.0;
+    if (!calc_apply_binary(ui->calc_acc, ui->calc_cur, ui->calc_op, &res)) {
+        calc_clear(ui);
+        ui->calc_error = true;
+        return;
+    }
+    ui->calc_cur = res;
+    ui->calc_acc = res;
+    ui->calc_has_acc = false;
+    ui->calc_has_op = false;
+    ui->calc_len = 0;
+    ui->calc_buf[0] = '\0';
+    ui->calc_fresh_result = true;
+}
+
+static void calc_set_op(s20_ui_t *ui, uint8_t op) {
+    if (ui->calc_has_acc && ui->calc_has_op && ui->calc_len > 0) {
+        double res = 0.0;
+        if (!calc_apply_binary(ui->calc_acc, ui->calc_cur, ui->calc_op, &res)) {
+            calc_clear(ui);
+            ui->calc_error = true;
+            return;
+        }
+        ui->calc_acc = res;
+        ui->calc_cur = res;
+    } else {
+        ui->calc_acc = ui->calc_cur;
+        ui->calc_has_acc = true;
+    }
+    ui->calc_op = op;
+    ui->calc_has_op = true;
+    ui->calc_len = 0;
+    ui->calc_buf[0] = '\0';
+    ui->calc_fresh_result = false;
+}
+
 void s20_ui_handle_key(s20_ui_t *ui, s20_key_t key) {
     if (key == S20_KEY_NONE) return;
 
@@ -716,7 +776,7 @@ void s20_ui_handle_key(s20_ui_t *ui, s20_key_t key) {
                 ui->calc_buf[ui->calc_len++] = (char)('0' + (key - S20_KEY_0));
                 ui->calc_buf[ui->calc_len] = '\0';
             }
-        } else if (key == S20_KEY_HASH || key == S20_KEY_OP_DOT) {
+        } else if (key == S20_KEY_HASH) {
             if (!strchr(ui->calc_buf, '.') && ui->calc_len < 9) {
                 if (ui->calc_len == 0) ui->calc_buf[ui->calc_len++] = '0';
                 ui->calc_buf[ui->calc_len++] = '.';
@@ -728,7 +788,7 @@ void s20_ui_handle_key(s20_ui_t *ui, s20_key_t key) {
             } else {
                 ui->screen = S20_SCREEN_CALCULATOR;
             }
-        } else if (key == S20_KEY_SELECT || key == S20_KEY_OP_EQ) {
+        } else if (key == S20_KEY_SELECT) {
             double r = (ui->calc_len > 0) ? strtod(ui->calc_buf, NULL) : 1.0;
             if (r > 0.0 && isfinite(r)) ui->calc_rate = r;
             ui->calc_len = 0;
@@ -738,61 +798,41 @@ void s20_ui_handle_key(s20_ui_t *ui, s20_key_t key) {
         return;
     }
 
-    if (ui->screen == S20_SCREEN_CALCULATOR || ui->screen == S20_SCREEN_CALC_OPTIONS) {
-        if (ui->screen == S20_SCREEN_CALC_OPTIONS) {
-            if (key == S20_KEY_UP) {
-                ui->calc_opt_cursor = (ui->calc_opt_cursor + 8) % 9;
-                return;
-            }
-            if (key == S20_KEY_DOWN) {
-                ui->calc_opt_cursor = (ui->calc_opt_cursor + 1) % 9;
-                return;
-            }
-            if (key == S20_KEY_BACK) {
-                ui->screen = S20_SCREEN_CALCULATOR;
-                return;
-            }
-            if (key == S20_KEY_SELECT) {
-                int opt = ui->calc_opt_cursor;
-                ui->screen = S20_SCREEN_CALCULATOR;
-                if (opt == 0) { /* Equals */
-                    key = S20_KEY_OP_EQ;
-                } else if (opt >= 1 && opt <= 4) { /* + - * / */
-                    static const s20_key_t op_keys[4] = {
-                        S20_KEY_OP_ADD, S20_KEY_OP_SUB, S20_KEY_OP_MUL, S20_KEY_OP_DIV
-                    };
-                    key = op_keys[opt - 1];
-                } else if (opt == 5) { /* Clear */
-                    ui->calc_acc = 0.0;
-                    ui->calc_cur = 0.0;
-                    ui->calc_len = 0;
-                    ui->calc_buf[0] = '\0';
-                    ui->calc_has_acc = false;
-                    ui->calc_has_op = false;
-                    ui->calc_fresh_result = false;
-                    ui->calc_error = false;
-                    return;
-                } else if (opt == 6) { /* Exchange rate */
-                    snprintf(ui->calc_buf, sizeof(ui->calc_buf), "%.6g", ui->calc_rate);
-                    ui->calc_len = (uint8_t)strlen(ui->calc_buf);
-                    ui->screen = S20_SCREEN_CALC_RATE;
-                    return;
-                } else if (opt == 7 || opt == 8) { /* In domestic / In foreign */
-                    double r = (ui->calc_rate > 0.0) ? ui->calc_rate : 1.0;
-                    ui->calc_cur = (opt == 7) ? (ui->calc_cur * r) : (ui->calc_cur / r);
-                    ui->calc_acc = ui->calc_cur;
-                    ui->calc_has_acc = false;
-                    ui->calc_has_op = false;
-                    ui->calc_len = 0;
-                    ui->calc_buf[0] = '\0';
-                    ui->calc_fresh_result = true;
-                    return;
-                }
-            } else {
-                return;
+    if (ui->screen == S20_SCREEN_CALC_OPTIONS) {
+        if (key == S20_KEY_UP) {
+            ui->calc_opt_cursor = (ui->calc_opt_cursor + 8) % 9;
+        } else if (key == S20_KEY_DOWN) {
+            ui->calc_opt_cursor = (ui->calc_opt_cursor + 1) % 9;
+        } else if (key == S20_KEY_BACK) {
+            ui->screen = S20_SCREEN_CALCULATOR;
+        } else if (key == S20_KEY_SELECT) {
+            int opt = ui->calc_opt_cursor;
+            ui->screen = S20_SCREEN_CALCULATOR;
+            if (opt == 0) {
+                calc_eval(ui);
+            } else if (opt >= 1 && opt <= 4) {
+                calc_set_op(ui, (uint8_t)(opt - 1));
+            } else if (opt == 5) {
+                calc_clear(ui);
+            } else if (opt == 6) {
+                snprintf(ui->calc_buf, sizeof(ui->calc_buf), "%.6g", ui->calc_rate);
+                ui->calc_len = (uint8_t)strlen(ui->calc_buf);
+                ui->screen = S20_SCREEN_CALC_RATE;
+            } else if (opt == 7 || opt == 8) {
+                double r = (ui->calc_rate > 0.0) ? ui->calc_rate : 1.0;
+                ui->calc_cur = (opt == 7) ? (ui->calc_cur * r) : (ui->calc_cur / r);
+                ui->calc_acc = ui->calc_cur;
+                ui->calc_has_acc = false;
+                ui->calc_has_op = false;
+                ui->calc_len = 0;
+                ui->calc_buf[0] = '\0';
+                ui->calc_fresh_result = true;
             }
         }
+        return;
+    }
 
+    if (ui->screen == S20_SCREEN_CALCULATOR) {
         if (key >= S20_KEY_0 && key <= S20_KEY_9) {
             if (ui->calc_fresh_result || ui->calc_error) {
                 ui->calc_len = 0;
@@ -808,7 +848,7 @@ void s20_ui_handle_key(s20_ui_t *ui, s20_key_t key) {
                 ui->calc_buf[ui->calc_len] = '\0';
                 ui->calc_cur = strtod(ui->calc_buf, NULL);
             }
-        } else if (key == S20_KEY_HASH || key == S20_KEY_OP_DOT) {
+        } else if (key == S20_KEY_HASH) {
             if (ui->calc_fresh_result || ui->calc_error) {
                 ui->calc_len = 0;
                 ui->calc_buf[0] = '\0';
@@ -822,7 +862,6 @@ void s20_ui_handle_key(s20_ui_t *ui, s20_key_t key) {
                 ui->calc_cur = strtod(ui->calc_buf, NULL);
             }
         } else if (key == S20_KEY_UP || key == S20_KEY_DOWN) {
-            /* Toggle sign +/- */
             if (ui->calc_len > 0) {
                 if (ui->calc_buf[0] == '-') {
                     memmove(ui->calc_buf, ui->calc_buf + 1, ui->calc_len);
@@ -836,77 +875,19 @@ void s20_ui_handle_key(s20_ui_t *ui, s20_key_t key) {
             } else if (!ui->calc_has_op) {
                 ui->calc_cur = -ui->calc_cur;
             }
-        } else if (key == S20_KEY_STAR || key == S20_KEY_OP_ADD || key == S20_KEY_OP_SUB ||
-                   key == S20_KEY_OP_MUL || key == S20_KEY_OP_DIV) {
-            if (ui->calc_error) {
-                ui->calc_error = false;
-                ui->calc_cur = 0.0;
-                ui->calc_acc = 0.0;
-                ui->calc_has_acc = false;
-                ui->calc_has_op = false;
-                ui->calc_len = 0;
-                ui->calc_buf[0] = '\0';
-            }
-            /* Authentic Nokia '*': cycles + -> - -> * -> / if op already pending with no 2nd operand */
-            if (key == S20_KEY_STAR && ui->calc_has_op && ui->calc_len == 0) {
+        } else if (key == S20_KEY_STAR) {
+            if (ui->calc_error) calc_clear(ui);
+            if (ui->calc_has_op && ui->calc_len == 0) {
                 ui->calc_op = (uint8_t)((ui->calc_op + 1) & 3);
-                return;
-            }
-            uint8_t new_op = 0;
-            if (key == S20_KEY_OP_SUB) new_op = 1;
-            else if (key == S20_KEY_OP_MUL) new_op = 2;
-            else if (key == S20_KEY_OP_DIV) new_op = 3;
-
-            if (ui->calc_has_acc && ui->calc_has_op && ui->calc_len > 0) {
-                if (ui->calc_op == 0) ui->calc_acc += ui->calc_cur;
-                else if (ui->calc_op == 1) ui->calc_acc -= ui->calc_cur;
-                else if (ui->calc_op == 2) ui->calc_acc *= ui->calc_cur;
-                else if (ui->calc_op == 3) {
-                    if (ui->calc_cur == 0.0) { ui->calc_error = true; ui->calc_has_acc = false; ui->calc_has_op = false; ui->calc_len = 0; return; }
-                    ui->calc_acc /= ui->calc_cur;
-                }
-                ui->calc_cur = ui->calc_acc;
             } else {
-                ui->calc_acc = ui->calc_cur;
-                ui->calc_has_acc = true;
-            }
-            ui->calc_op = new_op;
-            ui->calc_has_op = true;
-            ui->calc_len = 0;
-            ui->calc_buf[0] = '\0';
-            ui->calc_fresh_result = false;
-        } else if (key == S20_KEY_OP_EQ) {
-            if (ui->calc_has_acc && ui->calc_has_op) {
-                double res = ui->calc_acc;
-                if (ui->calc_op == 0) res += ui->calc_cur;
-                else if (ui->calc_op == 1) res -= ui->calc_cur;
-                else if (ui->calc_op == 2) res *= ui->calc_cur;
-                else if (ui->calc_op == 3) {
-                    if (ui->calc_cur == 0.0) {
-                        ui->calc_error = true;
-                        ui->calc_has_acc = false;
-                        ui->calc_has_op = false;
-                        ui->calc_len = 0;
-                        ui->calc_buf[0] = '\0';
-                        return;
-                    }
-                    res /= ui->calc_cur;
-                }
-                ui->calc_cur = res;
-                ui->calc_acc = res;
-                ui->calc_has_acc = false;
-                ui->calc_has_op = false;
-                ui->calc_len = 0;
-                ui->calc_buf[0] = '\0';
-                ui->calc_fresh_result = true;
+                calc_set_op(ui, 0);
             }
         } else if (key == S20_KEY_SELECT) {
             ui->calc_opt_cursor = 0;
             ui->screen = S20_SCREEN_CALC_OPTIONS;
         } else if (key == S20_KEY_BACK) {
             if (ui->calc_error) {
-                ui->calc_error = false;
-                ui->calc_cur = 0.0;
+                calc_clear(ui);
             } else if (ui->calc_len > 0) {
                 ui->calc_buf[--ui->calc_len] = '\0';
                 ui->calc_cur = (ui->calc_len > 0 && !(ui->calc_len == 1 && ui->calc_buf[0] == '-'))
