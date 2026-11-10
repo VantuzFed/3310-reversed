@@ -1,0 +1,19 @@
+# Build artifacts
+build/
+nokia3310
+nokia3310.exe
+smoke_test
+smoke_test.exe
+*.o
+*.obj
+*.a
+*.lib
+*.exe
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# OS / IDE files
+.DS_Store
+Thumbs.db
